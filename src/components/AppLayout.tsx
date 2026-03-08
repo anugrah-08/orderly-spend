@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Building2, Package, FileText, CheckSquare,
   ClipboardList, Receipt, CreditCard, BarChart3, Bell, Settings,
-  ChevronLeft, ChevronRight, Search, User, LogOut
+  ChevronLeft, ChevronRight, Search, User, LogOut, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -23,22 +24,30 @@ const navItems = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/signin");
+  };
 
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside
         className={cn(
-          "flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-300 shrink-0",
+          "flex flex-col bg-sidebar text-sidebar-foreground transition-all duration-300 shrink-0",
           collapsed ? "w-16" : "w-60"
         )}
       >
         {/* Logo */}
         <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <span className="text-primary-foreground font-bold text-sm">V</span>
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-xl btn-gradient flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+              <span className="font-bold text-sm">V</span>
             </div>
             {!collapsed && (
               <span className="font-semibold text-sidebar-accent-foreground text-sm whitespace-nowrap">
@@ -57,13 +66,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                 )}
               >
-                <item.icon className="w-4 h-4 shrink-0" />
+                <item.icon className={cn("w-4 h-4 shrink-0", active && "text-primary")} />
                 {!collapsed && <span className="truncate">{item.title}</span>}
               </Link>
             );
@@ -88,27 +97,57 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search..."
-                className="pl-9 pr-4 py-1.5 text-sm bg-secondary rounded-lg border-none outline-none focus:ring-2 focus:ring-primary/20 w-64"
+                placeholder="Search anything..."
+                className="input-icon w-72"
               />
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/notifications" className="relative p-2 rounded-lg hover:bg-secondary transition-colors">
+            <Link to="/notifications" className="relative p-2 rounded-lg hover:bg-muted transition-colors">
               <Bell className="w-4 h-4 text-muted-foreground" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
             </Link>
-            <div className="flex items-center gap-2 pl-3 border-l">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="w-4 h-4 text-primary" />
-              </div>
-              <span className="text-sm font-medium">Admin</span>
+
+            {/* Profile dropdown */}
+            <div className="relative pl-3 border-l">
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                className="flex items-center gap-2 hover:bg-muted px-2 py-1.5 rounded-lg transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm font-medium">{user?.name || "Admin"}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+
+              {profileOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-card rounded-xl border shadow-xl z-50 py-1.5 animate-fade-in">
+                    <div className="px-4 py-2.5 border-b">
+                      <p className="text-sm font-medium">{user?.name || "John Admin"}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email || "john@company.com"}</p>
+                    </div>
+                    <Link to="/account" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors">
+                      <User className="w-4 h-4 text-muted-foreground" />Profile
+                    </Link>
+                    <Link to="/account" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors">
+                      <Settings className="w-4 h-4 text-muted-foreground" />Account settings
+                    </Link>
+                    <div className="border-t my-1" />
+                    <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 text-sm text-destructive hover:bg-muted transition-colors w-full">
+                      <LogOut className="w-4 h-4" />Log out
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 animate-fade-in">
           {children}
         </main>
       </div>
