@@ -27,10 +27,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const displayName = profile?.name || user?.email?.split("@")[0] || "User";
+  const displayEmail = user?.email || "";
+
+  const handleLogout = async () => {
+    await logout();
     navigate("/signin");
   };
 
@@ -117,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <User className="w-4 h-4 text-primary" />
                 </div>
-                <span className="text-sm font-medium">{user?.name || "Admin"}</span>
+                <span className="text-sm font-medium">{displayName}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
 
@@ -126,8 +129,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
                   <div className="absolute right-0 top-full mt-2 w-56 bg-card rounded-xl border shadow-xl z-50 py-1.5 animate-fade-in">
                     <div className="px-4 py-2.5 border-b">
-                      <p className="text-sm font-medium">{user?.name || "John Admin"}</p>
-                      <p className="text-xs text-muted-foreground">{user?.email || "john@company.com"}</p>
+                      <p className="text-sm font-medium">{displayName}</p>
+                      <p className="text-xs text-muted-foreground">{displayEmail}</p>
                     </div>
                     <Link to="/account" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted transition-colors">
                       <User className="w-4 h-4 text-muted-foreground" />Profile

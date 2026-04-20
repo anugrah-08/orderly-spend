@@ -2,17 +2,24 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, Eye, EyeOff, CheckCircle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirm) return;
+    if (password !== confirm) { toast.error("Passwords don't match"); return; }
+    setSubmitting(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setSubmitting(false);
+    if (error) { toast.error(error.message); return; }
     setDone(true);
     setTimeout(() => navigate("/signin"), 2000);
   };
@@ -45,7 +52,7 @@ export default function ResetPassword() {
               <input type={showPassword ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" className="input-icon w-full" required />
             </div>
           </div>
-          <button type="submit" className="w-full py-2.5 btn-gradient text-sm">Reset password</button>
+          <button type="submit" disabled={submitting} className="w-full py-2.5 btn-gradient text-sm disabled:opacity-60">{submitting ? "Updating…" : "Reset password"}</button>
         </form>
       )}
     </AuthLayout>
