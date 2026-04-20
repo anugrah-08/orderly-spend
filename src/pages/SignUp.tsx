@@ -15,11 +15,15 @@ export default function SignUp() {
   const { signup } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) return;
-    signup({ name, email, company, password });
-    navigate("/");
+    setSubmitting(true);
+    const { error } = await signup({ name, email, company, password });
+    setSubmitting(false);
+    if (!error) navigate("/signin");
   };
 
   return (
@@ -71,8 +75,8 @@ export default function SignUp() {
           <span className="text-muted-foreground">I agree to the <a href="#" className="text-primary hover:underline">Terms of Service</a> and <a href="#" className="text-primary hover:underline">Privacy Policy</a></span>
         </label>
 
-        <button type="submit" className="w-full py-2.5 btn-gradient text-sm">
-          Create account
+        <button type="submit" disabled={submitting} className="w-full py-2.5 btn-gradient text-sm disabled:opacity-60">
+          {submitting ? "Creating…" : "Create account"}
         </button>
 
         <p className="text-center text-sm text-muted-foreground">

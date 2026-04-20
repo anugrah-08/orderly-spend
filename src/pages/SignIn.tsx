@@ -12,10 +12,14 @@ export default function SignIn() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, password);
-    navigate("/");
+    setSubmitting(true);
+    const { error } = await login(email, password);
+    setSubmitting(false);
+    if (!error) navigate("/");
   };
 
   return (
@@ -62,8 +66,8 @@ export default function SignIn() {
           <Link to="/forgot-password" className="text-sm text-primary hover:underline font-medium">Forgot password?</Link>
         </div>
 
-        <button type="submit" className="w-full py-2.5 btn-gradient text-sm">
-          Sign in
+        <button type="submit" disabled={submitting} className="w-full py-2.5 btn-gradient text-sm disabled:opacity-60">
+          {submitting ? "Signing in…" : "Sign in"}
         </button>
 
         <p className="text-center text-sm text-muted-foreground">
