@@ -2,13 +2,22 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSubmitting(false);
+    if (error) { toast.error(error.message); return; }
     setSent(true);
   };
 
@@ -36,7 +45,7 @@ export default function ForgotPassword() {
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" className="input-icon w-full" required />
             </div>
           </div>
-          <button type="submit" className="w-full py-2.5 btn-gradient text-sm">Send reset link</button>
+          <button type="submit" disabled={submitting} className="w-full py-2.5 btn-gradient text-sm disabled:opacity-60">{submitting ? "Sending…" : "Send reset link"}</button>
           <Link to="/signin" className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />Back to sign in
           </Link>
