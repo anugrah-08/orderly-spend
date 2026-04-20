@@ -1,112 +1,148 @@
-import { Plus, CreditCard, CheckCircle, Clock, ArrowUpRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, CreditCard, CheckCircle, Clock, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-
-const payments = [
-  { id: "PAY-001", invoice: "INV-001", vendor: "TechCorp Solutions", amount: "$12,450", method: "Wire Transfer", status: "Completed", date: "Mar 6, 2026" },
-  { id: "PAY-002", invoice: "INV-004", vendor: "PrintMedia Inc", amount: "$1,750", method: "ACH", status: "Completed", date: "Mar 5, 2026" },
-  { id: "PAY-003", invoice: "INV-002", vendor: "Office Depot", amount: "$3,280", method: "Check", status: "Processing", date: "Mar 7, 2026" },
-  { id: "PAY-004", invoice: "INV-005", vendor: "DataFlow Analytics", amount: "$8,600", method: "Wire Transfer", status: "Scheduled", date: "Mar 12, 2026" },
-];
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import TableSkeleton from "@/components/TableSkeleton";
+import EmptyState from "@/components/EmptyState";
 
 const statusColors: Record<string, string> = {
-  Completed: "bg-success/10 text-success",
-  Processing: "bg-warning/10 text-warning",
-  Scheduled: "bg-primary/10 text-primary",
+  Paid: "bg-success/10 text-success",
+  Processing: "bg-primary/10 text-primary",
+  Scheduled: "bg-warning/10 text-warning",
+  Failed: "bg-destructive/10 text-destructive",
+};
+
+type Payment = {
+  id: string; payment_number: string; amount: number; method: string | null;
+  status: string; paid_at: string | null; created_at: string;
+  invoice: { invoice_number: string; vendor: { name: string } | null } | null;
 };
 
 export default function Payments() {
+  const [items, setItems] = useState<Payment[]>([]);
+  const [invoices, setInvoices] = useState<{ id: string; invoice_number: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ invoice_id: "", amount: "", method: "", paid_at: "" });
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data, error }, { data: invs }] = await Promise.all([
+      supabase.from("payments").select("*, invoice:invoices(invoice_number, vendor:vendors(name))").order("created_at", { ascending: false }),
+      supabase.from("invoices").select("id, invoice_number").order("created_at", { ascending: false }),
+    ]);
+    if (error) toast.error(error.message);
+    else setItems((data ?? []) as unknown as Payment[]);
+    setInvoices(invs ?? []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("payments").insert({
+      invoice_id: form.invoice_id || null,
+      amount: parseFloat(form.amount) || 0,
+      method: form.method || null,
+      paid_at: form.paid_at ? new Date(form.paid_at).toISOString() : null,
+      status: form.paid_at ? "Paid" : "Scheduled",
+    });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Payment recorded");
+    setOpen(false);
+    setForm({ invoice_id: "", amount: "", method: "", paid_at: "" });
+    load();
+  };
+
+  const totalPaid = items.filter((p) => p.status === "Paid").reduce((s, p) => s + Number(p.amount), 0);
+  const totalProcessing = items.filter((p) => p.status === "Processing").reduce((s, p) => s + Number(p.amount), 0);
+  const totalScheduled = items.filter((p) => p.status === "Scheduled").reduce((s, p) => s + Number(p.amount), 0);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Payments</h1>
-          <p className="text-muted-foreground text-sm mt-1">Track and record payments</p>
+          <p className="text-muted-foreground text-sm mt-1">Track and record vendor payments</p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" />Record Payment</Button>
-          </DialogTrigger>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" />Record Payment</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Record Payment</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
-              <div><Label>Invoice</Label><Input placeholder="Invoice number" className="mt-1.5" /></div>
-              <div><Label>Amount</Label><Input placeholder="$0.00" className="mt-1.5" /></div>
-              <div><Label>Payment Method</Label><Input placeholder="Wire Transfer / ACH / Check" className="mt-1.5" /></div>
-              <div><Label>Payment Date</Label><Input type="date" className="mt-1.5" /></div>
-              <Button className="mt-2">Record Payment</Button>
+              <div>
+                <Label>Invoice</Label>
+                <select value={form.invoice_id} onChange={(e) => setForm({ ...form, invoice_id: e.target.value })} className="mt-1.5 w-full h-10 px-3 rounded-lg border bg-background text-sm">
+                  <option value="">Select invoice…</option>
+                  {invoices.map((i) => <option key={i.id} value={i.id}>{i.invoice_number}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><Label>Amount</Label><Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="mt-1.5" /></div>
+                <div><Label>Method</Label><Input value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })} placeholder="Wire, ACH, Card…" className="mt-1.5" /></div>
+              </div>
+              <div><Label>Paid Date</Label><Input type="date" value={form.paid_at} onChange={(e) => setForm({ ...form, paid_at: e.target.value })} className="mt-1.5" /></div>
+              <Button onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Payment"}</Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">$14,200</p>
-              <p className="text-sm text-muted-foreground">Paid this month</p>
-            </div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">$3,280</p>
-              <p className="text-sm text-muted-foreground">Processing</p>
+        {[
+          { label: "Paid", value: `$${totalPaid.toLocaleString()}`, icon: CheckCircle, color: "success" },
+          { label: "Processing", value: `$${totalProcessing.toLocaleString()}`, icon: Clock, color: "primary" },
+          { label: "Scheduled", value: `$${totalScheduled.toLocaleString()}`, icon: Calendar, color: "warning" },
+        ].map((s) => (
+          <div key={s.label} className="kpi-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{s.label}</p>
+                <p className="text-2xl font-semibold mt-1">{s.value}</p>
+              </div>
+              <div className={`w-10 h-10 rounded-lg bg-${s.color}/10 flex items-center justify-center`}><s.icon className={`w-5 h-5 text-${s.color}`} /></div>
             </div>
           </div>
-        </div>
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">$8,600</p>
-              <p className="text-sm text-muted-foreground">Scheduled</p>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="table-container">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-muted/30">
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Payment ID</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Invoice</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Vendor</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Amount</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Method</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Status</th>
-              <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((p) => (
-              <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                <td className="px-6 py-3 text-sm font-medium text-primary">{p.id}</td>
-                <td className="px-6 py-3 text-sm text-muted-foreground">{p.invoice}</td>
-                <td className="px-6 py-3 text-sm font-medium">{p.vendor}</td>
-                <td className="px-6 py-3 text-sm font-bold">{p.amount}</td>
-                <td className="px-6 py-3 text-sm text-muted-foreground">{p.method}</td>
-                <td className="px-6 py-3">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[p.status]}`}>{p.status}</span>
-                </td>
-                <td className="px-6 py-3 text-sm text-muted-foreground">{p.date}</td>
+        {loading ? <TableSkeleton rows={5} cols={6} /> : items.length === 0 ? (
+          <EmptyState icon={CreditCard} title="No payments yet" description="Record your first payment." />
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Payment</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Invoice</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Vendor</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Amount</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Method</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((p) => (
+                <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <td className="px-6 py-3 text-sm font-medium text-primary">{p.payment_number}</td>
+                  <td className="px-6 py-3 text-sm">{p.invoice?.invoice_number ?? "—"}</td>
+                  <td className="px-6 py-3 text-sm font-medium">{p.invoice?.vendor?.name ?? "—"}</td>
+                  <td className="px-6 py-3 text-sm font-medium">${Number(p.amount).toLocaleString()}</td>
+                  <td className="px-6 py-3 text-sm text-muted-foreground">{p.method ?? "—"}</td>
+                  <td className="px-6 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusColors[p.status]}`}>{p.status}</span></td>
+                  <td className="px-6 py-3 text-sm text-muted-foreground">{p.paid_at ? new Date(p.paid_at).toLocaleDateString() : new Date(p.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

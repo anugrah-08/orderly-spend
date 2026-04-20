@@ -1,87 +1,98 @@
-import { CheckCircle, XCircle, Clock, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Clock, CheckCircle, XCircle, Check, X, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import TableSkeleton from "@/components/TableSkeleton";
+import EmptyState from "@/components/EmptyState";
 
-const pendingApprovals = [
-  { id: "PR-001", product: "MacBook Pro 16\"", qty: 5, dept: "Engineering", cost: "$12,495", requester: "Sarah Chen", date: "Mar 6, 2026", justification: "Team expansion requires new developer machines for 5 incoming engineers." },
-  { id: "PR-003", product: "Cisco Switches", qty: 3, dept: "IT", cost: "$5,670", requester: "Alex Kumar", date: "Mar 5, 2026", justification: "Network infrastructure upgrade for the new wing. Current switches at capacity." },
-  { id: "PR-006", product: "Software Licenses", qty: 25, dept: "Engineering", cost: "$8,750", requester: "David Lin", date: "Mar 5, 2026", justification: "Annual renewal of development tools licenses for the engineering team." },
-  { id: "PR-007", product: "Conference Room AV", qty: 2, dept: "Facilities", cost: "$15,200", requester: "Rachel Green", date: "Mar 4, 2026", justification: "New conference rooms need complete AV setup for hybrid meetings." },
-];
+type PR = {
+  id: string; pr_number: string; product_name: string; quantity: number;
+  department: string | null; estimated_cost: number; justification: string | null;
+  status: "Pending" | "Approved" | "Rejected"; created_at: string; requester_id: string;
+};
 
 export default function Approvals() {
+  const { user, hasAnyRole } = useAuth();
+  const [items, setItems] = useState<PR[]>([]);
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [loading, setLoading] = useState(true);
+  const canApprove = hasAnyRole(["admin", "procurement_manager"]);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("purchase_requests").select("*").order("created_at", { ascending: false });
+    if (error) toast.error(error.message);
+    else {
+      const all = (data ?? []) as PR[];
+      setItems(all.filter((r) => r.status === "Pending"));
+      setCounts({
+        pending: all.filter((r) => r.status === "Pending").length,
+        approved: all.filter((r) => r.status === "Approved").length,
+        rejected: all.filter((r) => r.status === "Rejected").length,
+      });
+    }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const decide = async (id: string, status: "Approved" | "Rejected") => {
+    if (!user) return;
+    const { error } = await supabase.from("purchase_requests").update({
+      status, reviewed_by: user.id, reviewed_at: new Date().toISOString(),
+    }).eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success(`Request ${status.toLowerCase()}`);
+    load();
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Approvals</h1>
-        <p className="text-muted-foreground text-sm mt-1">Review and approve purchase requests</p>
+        <p className="text-muted-foreground text-sm mt-1">Review pending purchase requests</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{pendingApprovals.length}</p>
-              <p className="text-sm text-muted-foreground">Pending</p>
-            </div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">28</p>
-              <p className="text-sm text-muted-foreground">Approved this month</p>
+        {[
+          { label: "Pending", value: counts.pending, icon: Clock, color: "warning" },
+          { label: "Approved", value: counts.approved, icon: CheckCircle, color: "success" },
+          { label: "Rejected", value: counts.rejected, icon: XCircle, color: "destructive" },
+        ].map((s) => (
+          <div key={s.label} className="kpi-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">{s.label}</p>
+                <p className="text-2xl font-semibold mt-1">{s.value}</p>
+              </div>
+              <div className={`w-10 h-10 rounded-lg bg-${s.color}/10 flex items-center justify-center`}><s.icon className={`w-5 h-5 text-${s.color}`} /></div>
             </div>
           </div>
-        </div>
-        <div className="kpi-card">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-              <XCircle className="w-5 h-5 text-destructive" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">3</p>
-              <p className="text-sm text-muted-foreground">Rejected this month</p>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      <div className="space-y-4">
-        {pendingApprovals.map((item) => (
-          <div key={item.id} className="glass-card p-6">
-            <div className="flex items-start justify-between">
+      <div className="space-y-3">
+        {loading ? <TableSkeleton rows={3} cols={3} /> : items.length === 0 ? (
+          <div className="glass-card"><EmptyState icon={CheckSquare} title="All caught up" description="No requests pending approval right now." /></div>
+        ) : items.map((r) => (
+          <div key={r.id} className="glass-card p-5">
+            <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-sm font-medium text-primary">{item.id}</span>
-                  <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-warning/10 text-warning inline-flex items-center gap-1">
-                    <Clock className="w-3 h-3" />Pending Review
-                  </span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium text-primary">{r.pr_number}</span>
+                  <span className="text-xs text-muted-foreground">• {new Date(r.created_at).toLocaleDateString()}</span>
                 </div>
-                <h3 className="font-semibold text-lg">{item.product} × {item.qty}</h3>
-                <p className="text-muted-foreground text-sm mt-1">{item.justification}</p>
-                <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{item.requester}</span>
-                  <span>{item.dept}</span>
-                  <span>{item.date}</span>
-                </div>
+                <h3 className="font-medium">{r.product_name} × {r.quantity}</h3>
+                <p className="text-sm text-muted-foreground mt-1">{r.department ?? "—"} • ${Number(r.estimated_cost).toLocaleString()}</p>
+                {r.justification && <p className="text-sm mt-2 text-muted-foreground italic">"{r.justification}"</p>}
               </div>
-              <div className="text-right ml-6">
-                <p className="text-xl font-bold">{item.cost}</p>
-                <div className="flex gap-2 mt-4">
-                  <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10">
-                    <XCircle className="w-4 h-4 mr-1" />Reject
-                  </Button>
-                  <Button size="sm">
-                    <CheckCircle className="w-4 h-4 mr-1" />Approve
-                  </Button>
+              {canApprove && (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => decide(r.id, "Rejected")}><X className="w-4 h-4 mr-1" />Reject</Button>
+                  <Button size="sm" onClick={() => decide(r.id, "Approved")}><Check className="w-4 h-4 mr-1" />Approve</Button>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         ))}
