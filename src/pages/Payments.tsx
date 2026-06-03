@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TableSkeleton from "@/components/TableSkeleton";
 import EmptyState from "@/components/EmptyState";
+import RazorpayCheckout from "@/components/RazorpayCheckout";
 
 const statusColors: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -93,6 +94,8 @@ export default function Payments() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <RazorpayCheckout />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
