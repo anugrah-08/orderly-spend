@@ -47,12 +47,15 @@ export default function Payments() {
 
   const load = async () => {
     setLoading(true);
-    const [{ data, error }, { data: invs }] = await Promise.all([
+    const [{ data, error }, { data: invs }, { data: rzData, error: rzError }] = await Promise.all([
       supabase.from("payments").select("*, invoice:invoices(invoice_number, vendor:vendors(name))").order("created_at", { ascending: false }),
       supabase.from("invoices").select("id, invoice_number").order("created_at", { ascending: false }),
+      supabase.from("razorpay_payments").select("*").order("created_at", { ascending: false }),
     ]);
     if (error) toast.error(error.message);
     else setItems((data ?? []) as unknown as Payment[]);
+    if (rzError) toast.error(rzError.message);
+    else setRzItems((rzData ?? []) as unknown as RazorpayPayment[]);
     setInvoices(invs ?? []);
     setLoading(false);
   };
