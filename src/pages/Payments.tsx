@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import TableSkeleton from "@/components/TableSkeleton";
 import EmptyState from "@/components/EmptyState";
+import RazorpayCheckout from "@/components/RazorpayCheckout";
 
 const statusColors: Record<string, string> = {
   Paid: "bg-success/10 text-success",
