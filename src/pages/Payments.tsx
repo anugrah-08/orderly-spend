@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, CreditCard, CheckCircle, Clock, Calendar } from "lucide-react";
+import { Plus, CreditCard, CheckCircle, Clock, Calendar, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
