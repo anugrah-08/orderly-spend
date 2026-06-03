@@ -95,6 +95,8 @@ export default function Payments() {
         </Dialog>
       </div>
 
+      <RazorpayCheckout />
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: "Paid", value: `$${totalPaid.toLocaleString()}`, icon: CheckCircle, color: "success" },
