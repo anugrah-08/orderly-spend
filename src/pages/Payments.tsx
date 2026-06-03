@@ -170,6 +170,52 @@ export default function Payments() {
           </table>
         )}
       </div>
+
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Receipt className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold">Subscription Payment Records</h2>
+        </div>
+        <div className="table-container !shadow-none !rounded-none !border-0">
+          {loading ? (
+            <TableSkeleton rows={3} cols={5} />
+          ) : rzItems.length === 0 ? (
+            <EmptyState icon={Receipt} title="No subscription payments yet" description="Your Razorpay payment history will appear here." />
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Order ID</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Payment ID</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Plan</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Amount</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Status</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rzItems.map((p) => {
+                  const notePlan = (p.notes?.plan_id as string) || (p.notes?.label as string) || (p.receipt ?? "Subscription");
+                  return (
+                    <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-3 text-sm font-medium text-primary">{p.razorpay_order_id}</td>
+                      <td className="px-6 py-3 text-sm">{p.razorpay_payment_id ?? "—"}</td>
+                      <td className="px-6 py-3 text-sm capitalize">{notePlan}</td>
+                      <td className="px-6 py-3 text-sm font-medium">₹{(p.amount / 100).toLocaleString()}</td>
+                      <td className="px-6 py-3">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${rzStatusColors[p.status] || "bg-muted text-muted-foreground"}`}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
