@@ -17,6 +17,12 @@ const statusColors: Record<string, string> = {
   Failed: "bg-destructive/10 text-destructive",
 };
 
+const rzStatusColors: Record<string, string> = {
+  created: "bg-warning/10 text-warning",
+  paid: "bg-success/10 text-success",
+  failed: "bg-destructive/10 text-destructive",
+};
+
 type Payment = {
   id: string; payment_number: string; amount: number; method: string | null;
   status: string; paid_at: string | null; created_at: string;
