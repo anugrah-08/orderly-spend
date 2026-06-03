@@ -23,8 +23,22 @@ type Payment = {
   invoice: { invoice_number: string; vendor: { name: string } | null } | null;
 };
 
+type RazorpayPayment = {
+  id: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  receipt: string | null;
+  notes: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function Payments() {
   const [items, setItems] = useState<Payment[]>([]);
+  const [rzItems, setRzItems] = useState<RazorpayPayment[]>([]);
   const [invoices, setInvoices] = useState<{ id: string; invoice_number: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
