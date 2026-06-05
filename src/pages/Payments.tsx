@@ -43,30 +43,76 @@ type RazorpayPayment = {
   updated_at: string;
 };
 
+type RefundRequest = {
+  id: string;
+  razorpay_payment_row_id: string;
+  status: string;
+  reason: string;
+  created_at: string;
+};
+
+const refundStatusColors: Record<string, string> = {
+  pending: "bg-warning/10 text-warning",
+  approved: "bg-primary/10 text-primary",
+  processed: "bg-success/10 text-success",
+  rejected: "bg-destructive/10 text-destructive",
+};
+
 export default function Payments() {
   const [items, setItems] = useState<Payment[]>([]);
   const [rzItems, setRzItems] = useState<RazorpayPayment[]>([]);
+  const [refunds, setRefunds] = useState<RefundRequest[]>([]);
   const [invoices, setInvoices] = useState<{ id: string; invoice_number: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ invoice_id: "", amount: "", method: "", paid_at: "" });
 
+  const [detailsRow, setDetailsRow] = useState<RazorpayPayment | null>(null);
+  const [refundRow, setRefundRow] = useState<RazorpayPayment | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+
   const load = async () => {
     setLoading(true);
-    const [{ data, error }, { data: invs }, { data: rzData, error: rzError }] = await Promise.all([
+    const [{ data, error }, { data: invs }, { data: rzData, error: rzError }, { data: rfData }] = await Promise.all([
       supabase.from("payments").select("*, invoice:invoices(invoice_number, vendor:vendors(name))").order("created_at", { ascending: false }),
       supabase.from("invoices").select("id, invoice_number").order("created_at", { ascending: false }),
       supabase.from("razorpay_payments").select("*").order("created_at", { ascending: false }),
+      supabase.from("refund_requests").select("id, razorpay_payment_row_id, status, reason, created_at").order("created_at", { ascending: false }),
     ]);
     if (error) toast.error(error.message);
     else setItems((data ?? []) as unknown as Payment[]);
     if (rzError) toast.error(rzError.message);
     else setRzItems((rzData ?? []) as unknown as RazorpayPayment[]);
+    setRefunds((rfData ?? []) as RefundRequest[]);
     setInvoices(invs ?? []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  const submitRefund = async () => {
+    if (!refundRow) return;
+    if (refundReason.trim().length < 5) {
+      toast.error("Please provide a reason (at least 5 characters)");
+      return;
+    }
+    setSubmittingRefund(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase.from("refund_requests").insert({
+      user_id: userData.user?.id ?? "",
+      razorpay_payment_row_id: refundRow.id,
+      reason: refundReason.trim(),
+    });
+    setSubmittingRefund(false);
+    if (error) return toast.error(error.message);
+    toast.success("Refund request submitted — our team will review it shortly");
+    setRefundRow(null);
+    setRefundReason("");
+    load();
+  };
+
+  const refundForPayment = (id: string) => refunds.find((r) => r.razorpay_payment_row_id === id);
 
   const save = async () => {
     setSaving(true);
