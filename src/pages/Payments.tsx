@@ -368,6 +368,3 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
     </div>
   );
 }
-    </div>
-  );
-}
