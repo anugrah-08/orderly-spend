@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Plus, CreditCard, CheckCircle, Clock, Calendar, Receipt } from "lucide-react";
+import { Plus, CreditCard, CheckCircle, Clock, Calendar, Receipt, Eye, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
