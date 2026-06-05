@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { error: updErr } = await admin
+    const { data: payRow, error: updErr } = await admin
       .from("razorpay_payments")
       .update({
         razorpay_payment_id,
@@ -86,13 +86,55 @@ Deno.serve(async (req) => {
         status: "paid",
       })
       .eq("razorpay_order_id", razorpay_order_id)
-      .eq("user_id", userData.user.id);
+      .eq("user_id", userData.user.id)
+      .select("*")
+      .maybeSingle();
 
-    if (updErr) {
+    if (updErr || !payRow) {
       console.error("Update error", updErr);
       return new Response(JSON.stringify({ error: "DB update failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const notes = (payRow.notes ?? {}) as {
+      plan_id?: string;
+      label?: string;
+      duration_months?: number;
+      base_paise?: number;
+      previous_subscription_id?: string | null;
+    };
+
+    if (notes.plan_id && notes.duration_months) {
+      // Expire any active subscription (upgrade replaces immediately)
+      await admin
+        .from("subscriptions")
+        .update({ status: "expired", end_date: new Date().toISOString() })
+        .eq("user_id", userData.user.id)
+        .eq("status", "active");
+
+      // Also clear any scheduled rows since user actively chose new plan
+      await admin
+        .from("subscriptions")
+        .delete()
+        .eq("user_id", userData.user.id)
+        .eq("status", "scheduled");
+
+      const start = new Date();
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + notes.duration_months);
+
+      await admin.from("subscriptions").insert({
+        user_id: userData.user.id,
+        plan_id: notes.plan_id,
+        plan_label: notes.label ?? notes.plan_id,
+        duration_months: notes.duration_months,
+        price_paise: notes.base_paise ?? payRow.amount,
+        start_date: start.toISOString(),
+        end_date: end.toISOString(),
+        status: "active",
+        razorpay_payment_id: payRow.id,
       });
     }
 
