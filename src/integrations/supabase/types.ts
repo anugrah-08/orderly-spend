@@ -424,6 +424,50 @@ export type Database = {
         }
         Relationships: []
       }
+      refund_requests: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          id: string
+          razorpay_payment_row_id: string
+          reason: string
+          refunded_amount_paise: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          id?: string
+          razorpay_payment_row_id: string
+          reason: string
+          refunded_amount_paise?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          id?: string
+          razorpay_payment_row_id?: string
+          reason?: string
+          refunded_amount_paise?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_requests_razorpay_payment_row_id_fkey"
+            columns: ["razorpay_payment_row_id"]
+            isOneToOne: false
+            referencedRelation: "razorpay_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           created_at: string
