@@ -104,15 +104,36 @@ Deno.serve(async (req) => {
         chargePaise = Math.max(100, plan.amount - creditPaise); // Razorpay min ₹1
       } else {
         action = "downgrade";
-        // Downgrade scheduled — no payment required now
+        // Downgrade scheduled — no payment required now. Replace any existing scheduled row.
+        await admin
+          .from("subscriptions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("status", "scheduled");
+
+        const scheduledStart = new Date(activeSub.end_date);
+        const scheduledEnd = new Date(scheduledStart);
+        scheduledEnd.setMonth(scheduledEnd.getMonth() + plan.duration_months);
+
+        await admin.from("subscriptions").insert({
+          user_id: user.id,
+          plan_id: planId,
+          plan_label: plan.label,
+          duration_months: plan.duration_months,
+          price_paise: plan.amount,
+          start_date: scheduledStart.toISOString(),
+          end_date: scheduledEnd.toISOString(),
+          status: "scheduled",
+        });
+
         return new Response(
           JSON.stringify({
             action: "downgrade",
             scheduled: true,
-            scheduled_start: activeSub.end_date,
+            scheduled_start: scheduledStart.toISOString(),
             plan_id: planId,
             label: plan.label,
-            message: `Your ${plan.label} plan will start on ${new Date(activeSub.end_date).toLocaleDateString()}`,
+            message: `Your ${plan.label} plan will start on ${scheduledStart.toLocaleDateString()}`,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
