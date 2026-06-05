@@ -233,20 +233,22 @@ export default function Payments() {
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Order ID</th>
-                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Payment ID</th>
                   <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Plan</th>
                   <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Amount</th>
                   <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Status</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Refund</th>
                   <th className="text-left text-xs font-medium text-muted-foreground px-6 py-3">Date</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground px-6 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rzItems.map((p) => {
-                  const notePlan = (p.notes?.plan_id as string) || (p.notes?.label as string) || (p.receipt ?? "Subscription");
+                  const notePlan = (p.notes?.label as string) || (p.notes?.plan_id as string) || (p.receipt ?? "Subscription");
+                  const refund = refundForPayment(p.id);
+                  const canRefund = p.status === "paid" && !refund;
                   return (
                     <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                       <td className="px-6 py-3 text-sm font-medium text-primary">{p.razorpay_order_id}</td>
-                      <td className="px-6 py-3 text-sm">{p.razorpay_payment_id ?? "—"}</td>
                       <td className="px-6 py-3 text-sm capitalize">{notePlan}</td>
                       <td className="px-6 py-3 text-sm font-medium">₹{(p.amount / 100).toLocaleString()}</td>
                       <td className="px-6 py-3">
@@ -254,7 +256,28 @@ export default function Payments() {
                           {p.status}
                         </span>
                       </td>
+                      <td className="px-6 py-3">
+                        {refund ? (
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${refundStatusColors[refund.status] || "bg-muted text-muted-foreground"}`}>
+                            {refund.status}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-6 py-3 text-sm text-muted-foreground">{new Date(p.created_at).toLocaleDateString()}</td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => setDetailsRow(p)}>
+                            <Eye className="w-4 h-4 mr-1" /> Details
+                          </Button>
+                          {canRefund && (
+                            <Button size="sm" variant="outline" onClick={() => setRefundRow(p)}>
+                              <Undo2 className="w-4 h-4 mr-1" /> Refund
+                            </Button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -263,6 +286,88 @@ export default function Payments() {
           )}
         </div>
       </div>
+
+      {/* Payment details dialog */}
+      <Dialog open={!!detailsRow} onOpenChange={(o) => !o && setDetailsRow(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payment Details</DialogTitle>
+            <DialogDescription>Full record of this subscription transaction.</DialogDescription>
+          </DialogHeader>
+          {detailsRow && (
+            <div className="space-y-3 text-sm">
+              <Row label="Order ID" value={detailsRow.razorpay_order_id} mono />
+              <Row label="Payment ID" value={detailsRow.razorpay_payment_id ?? "—"} mono />
+              <Row label="Receipt" value={detailsRow.receipt ?? "—"} mono />
+              <Row label="Plan" value={String((detailsRow.notes?.label as string) || (detailsRow.notes?.plan_id as string) || "—")} />
+              <Row label="Action" value={String((detailsRow.notes?.action as string) || "new")} />
+              <Row label="Base price" value={`₹${Number((detailsRow.notes?.base_paise as number) ?? detailsRow.amount) / 100}`} />
+              {Number(detailsRow.notes?.credit_paise ?? 0) > 0 && (
+                <Row label="Credit applied" value={`− ₹${Number(detailsRow.notes?.credit_paise) / 100}`} />
+              )}
+              <Row label="Amount charged" value={`₹${(detailsRow.amount / 100).toLocaleString()} ${detailsRow.currency}`} />
+              <Row label="Status" value={detailsRow.status} />
+              <Row label="Created" value={new Date(detailsRow.created_at).toLocaleString()} />
+              <Row label="Updated" value={new Date(detailsRow.updated_at).toLocaleString()} />
+              {refundForPayment(detailsRow.id) && (
+                <div className="rounded-lg bg-muted/40 p-3 mt-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Refund request</p>
+                  <p className="text-sm"><strong>Status:</strong> {refundForPayment(detailsRow.id)!.status}</p>
+                  <p className="text-sm mt-1"><strong>Reason:</strong> {refundForPayment(detailsRow.id)!.reason}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Refund request dialog */}
+      <Dialog open={!!refundRow} onOpenChange={(o) => { if (!o) { setRefundRow(null); setRefundReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Refund</DialogTitle>
+            <DialogDescription>
+              Submit a refund request for this payment. Our team will review and process it within 5–7 business days.
+            </DialogDescription>
+          </DialogHeader>
+          {refundRow && (
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg bg-muted/40 p-3 text-sm">
+                <p><strong>Order:</strong> {refundRow.razorpay_order_id}</p>
+                <p><strong>Amount:</strong> ₹{(refundRow.amount / 100).toLocaleString()}</p>
+              </div>
+              <div>
+                <Label>Reason for refund</Label>
+                <Textarea
+                  className="mt-1.5"
+                  rows={4}
+                  placeholder="Tell us why you're requesting a refund…"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRefundRow(null); setRefundReason(""); }}>Cancel</Button>
+            <Button onClick={submitRefund} disabled={submittingRefund}>
+              {submittingRefund ? "Submitting…" : "Submit Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b last:border-0 pb-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`text-right ${mono ? "font-mono text-xs" : ""}`}>{value}</span>
+    </div>
+  );
+}
     </div>
   );
 }
