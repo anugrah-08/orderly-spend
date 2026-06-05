@@ -6,11 +6,21 @@ const corsHeaders = {
 };
 
 // Backend-validated plan catalog. Amounts are in paise (INR).
-const PLANS: Record<string, { amount: number; currency: string; label: string }> = {
-  starter: { amount: 49900, currency: "INR", label: "Starter Plan" },
-  pro: { amount: 149900, currency: "INR", label: "Pro Plan" },
-  enterprise: { amount: 499900, currency: "INR", label: "Enterprise Plan" },
+const PLANS: Record<
+  string,
+  { amount: number; currency: string; label: string; duration_months: number }
+> = {
+  monthly: { amount: 100000, currency: "INR", label: "Monthly", duration_months: 1 },
+  half_yearly: { amount: 500000, currency: "INR", label: "6 Months", duration_months: 6 },
+  yearly: { amount: 1000000, currency: "INR", label: "12 Months", duration_months: 12 },
 };
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function planRank(id: string): number {
+  const p = PLANS[id];
+  return p ? p.amount : 0;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -57,10 +67,101 @@ Deno.serve(async (req) => {
       });
     }
 
-    const receipt = `rcpt_${user.id.slice(0, 8)}_${Date.now()}`;
-    const notes = { user_id: user.id, plan_id: planId, label: plan.label };
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
-    // Create order via Razorpay REST
+    // Find current active subscription
+    const { data: activeSub } = await admin
+      .from("subscriptions")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .order("end_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let action: "new" | "upgrade" | "downgrade" | "same" = "new";
+    let creditPaise = 0;
+    let chargePaise = plan.amount;
+
+    if (activeSub) {
+      const currentRank = planRank(activeSub.plan_id);
+      if (activeSub.plan_id === planId) {
+        action = "same";
+      } else if (plan.amount > currentRank) {
+        action = "upgrade";
+        // Prorate unused value of current plan
+        const start = new Date(activeSub.start_date).getTime();
+        const end = new Date(activeSub.end_date).getTime();
+        const now = Date.now();
+        const totalDays = Math.max(1, Math.round((end - start) / MS_PER_DAY));
+        const remainingDays = Math.max(0, Math.round((end - now) / MS_PER_DAY));
+        creditPaise = Math.floor(
+          (Number(activeSub.price_paise) / totalDays) * remainingDays,
+        );
+        chargePaise = Math.max(100, plan.amount - creditPaise); // Razorpay min ₹1
+      } else {
+        action = "downgrade";
+        // Downgrade scheduled — no payment required now. Replace any existing scheduled row.
+        await admin
+          .from("subscriptions")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("status", "scheduled");
+
+        const scheduledStart = new Date(activeSub.end_date);
+        const scheduledEnd = new Date(scheduledStart);
+        scheduledEnd.setMonth(scheduledEnd.getMonth() + plan.duration_months);
+
+        await admin.from("subscriptions").insert({
+          user_id: user.id,
+          plan_id: planId,
+          plan_label: plan.label,
+          duration_months: plan.duration_months,
+          price_paise: plan.amount,
+          start_date: scheduledStart.toISOString(),
+          end_date: scheduledEnd.toISOString(),
+          status: "scheduled",
+        });
+
+        return new Response(
+          JSON.stringify({
+            action: "downgrade",
+            scheduled: true,
+            scheduled_start: scheduledStart.toISOString(),
+            plan_id: planId,
+            label: plan.label,
+            message: `Your ${plan.label} plan will start on ${scheduledStart.toLocaleDateString()}`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    if (action === "same") {
+      return new Response(
+        JSON.stringify({ action: "same", message: "You are already on this plan" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const receipt = `rcpt_${user.id.slice(0, 8)}_${Date.now()}`;
+    const notes = {
+      user_id: user.id,
+      plan_id: planId,
+      label: plan.label,
+      duration_months: plan.duration_months,
+      action,
+      credit_paise: creditPaise,
+      base_paise: plan.amount,
+      previous_subscription_id: activeSub?.id ?? null,
+    };
+
     const auth = btoa(`${KEY_ID}:${KEY_SECRET}`);
     const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
@@ -69,7 +170,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: plan.amount,
+        amount: chargePaise,
         currency: plan.currency,
         receipt,
         notes,
@@ -87,15 +188,10 @@ Deno.serve(async (req) => {
 
     const order = await orderRes.json();
 
-    // Persist with service role (bypass RLS for trusted insert)
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
     const { error: insErr } = await admin.from("razorpay_payments").insert({
       user_id: user.id,
       razorpay_order_id: order.id,
-      amount: plan.amount,
+      amount: chargePaise,
       currency: plan.currency,
       status: "created",
       receipt,
@@ -105,11 +201,16 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        action,
         key_id: KEY_ID,
         order_id: order.id,
-        amount: plan.amount,
+        amount: chargePaise,
+        base_amount: plan.amount,
+        credit: creditPaise,
         currency: plan.currency,
         receipt,
+        plan_id: planId,
+        label: plan.label,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

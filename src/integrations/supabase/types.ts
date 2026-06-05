@@ -424,6 +424,59 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          created_at: string
+          duration_months: number
+          end_date: string
+          id: string
+          plan_id: string
+          plan_label: string
+          price_paise: number
+          razorpay_payment_id: string | null
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duration_months: number
+          end_date: string
+          id?: string
+          plan_id: string
+          plan_label: string
+          price_paise: number
+          razorpay_payment_id?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duration_months?: number
+          end_date?: string
+          id?: string
+          plan_id?: string
+          plan_label?: string
+          price_paise?: number
+          razorpay_payment_id?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_razorpay_payment_id_fkey"
+            columns: ["razorpay_payment_id"]
+            isOneToOne: false
+            referencedRelation: "razorpay_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
